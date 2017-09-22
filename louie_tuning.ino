@@ -7,7 +7,7 @@ Based on the original "Looping Louie Tuning"-Sketch by Ronny Kersten (2013)
 |  Author          | flasher4401                                               |
 |  Last Modified   | October 2015                                              |
 |  Game Language   | German                                                    |
-|  Version         | 2.0                                                       |
+|  Version         | 2.0a                                                       |
 |  Microcontroller | Atmel ATmega328P                                          |
 |  File            | louie_tuning.ino                                          |
 +------------------+-----------------------------------------------------------+
@@ -41,14 +41,14 @@ const int led_rgb_g = 10;
 const int led_rgb_b = 9;
 const int led_ws = 5;
 const int player_button_cooldown = 1500;
-const int ledmode_pause_blinktime = 500;
+const int pause_resumeTime = 500;
 
 
 // variable declaration
 int ledmode = 1, ledmode_old = -1;
-int led_fade_changestep = 1, led_rgb_fade = 0, led_pause_blink=0;
+int led_fade_changestep = 1, led_rgb_fade = 0, led_blink=-1;
 int c_led_r=255, c_led_g=255, c_led_b=255, c_led_ws=0; //rgb: 0=on, 255=off - ws: 0=off, 255=on
-int gamemode=0, gamemode_old=0, pause=1, pause_trigger=0, player_enabled=1;
+int gamemode=0, gamemode_old=0, pause=1, pause_resume=0, pause_resume_c=0, player_enabled=1;
 int onoff_pushed=0, mode_pushed=0, player_pushed=0;
 int onoff_old=0, mode_old=0, led_old=1, player_old=0;
 int sensorValue = 0;        // value read from the pot
@@ -57,7 +57,7 @@ int outputValue = 0;
 int outputValueMod = 0;
 int outputValue_percent = 0;
 long duration=0, lasttime=0, nowtime=0;
-long durationMod=0, lasttimeMod=0, lasttimeLed=0;
+long durationMod=0, lasttimeMod=0, lasttimeLed=0, lasttimepause_resume=0;
 
 //gamemode_random
 int gamemode_random_lvl=1, gamemode_random_fwd1 = 0, gamemode_random_fwd2 = 0;
@@ -98,14 +98,16 @@ void loop() {
      }
      else
      {
-        ledmode=2; //sets pause_trigger=1
+        pause_resume=1;
+        pause_resume_c=0;
+        ledmode=2;
      }
   }
   onoff_old=onoff_pushed;
 
-  if(pause_trigger==1)
+  if(pause_resume==2)
   {
-    pause_trigger=0;
+    pause_resume=0;
     ledmode=0;
     pause=0;
   }
@@ -135,7 +137,7 @@ void loop() {
          lcd.setCursor(0, 0);
          lcd.print("Kamikaze Louie  ");
          lcd.setCursor(0, 1);
-         lcd.print("v2.0   \176Spielen ");
+         lcd.print("v2.0a  \176Spielen ");
       }
       break;
 
@@ -208,35 +210,35 @@ void loop() {
       switch(gamemode_random_lvl)
       {
         case 1:
-          gamemode_random_fwd1 = 37;
+          gamemode_random_fwd1 = 45;
           gamemode_random_fwd2 = 70;
           gamemode_random_bwd1 = 42;
           gamemode_random_bwd2 = 70;
           gamemode_random_maxplayerchange = 40;
           break;
         case 2:
-          gamemode_random_fwd1 = 40;
+          gamemode_random_fwd1 = 50;
           gamemode_random_fwd2 = 100;
           gamemode_random_bwd1 = 47;
           gamemode_random_bwd2 = 100;
           gamemode_random_maxplayerchange = 60;
           break;
         case 3:
-          gamemode_random_fwd1 = 45;
+          gamemode_random_fwd1 = 50;
           gamemode_random_fwd2 = 140;
           gamemode_random_bwd1 = 47;
           gamemode_random_bwd2 = 110;
           gamemode_random_maxplayerchange = 60;
           break;
         case 4:
-          gamemode_random_fwd1 = 45;
+          gamemode_random_fwd1 = 50;
           gamemode_random_fwd2 = 190;
           gamemode_random_bwd1 = 50;
           gamemode_random_bwd2 = 120;
           gamemode_random_maxplayerchange = 80;
           break;
         case 5:
-          gamemode_random_fwd1 = 45;
+          gamemode_random_fwd1 = 50;
           gamemode_random_fwd2 = 230;
           gamemode_random_bwd1 = 50;
           gamemode_random_bwd2 = 130;
@@ -320,36 +322,31 @@ void loop() {
 
     case 3: // speedup mode
       sensorValue = analogRead(poti_input);
-      gamemode_speedup_factor = map(sensorValue, 0, 1023, 4, 1);
+      gamemode_speedup_factor = map(sensorValue, 0, 1023, 5, 1);
     
       nowtime=millis();
-      if(nowtime>lasttime+(2000/gamemode_speedup_factor))
+      if(nowtime>lasttime+(1000/gamemode_speedup_factor))
       {
         lasttime=nowtime;        
         digitalWrite(motor_direction1, HIGH);
         digitalWrite(motor_direction2, LOW);
-        outputValue++;
-      }
-
-      if(player_enabled==1)
-      {
-        if(player_pushed==1 && nowtime>lasttime+(1000/gamemode_speedup_factor))
+        output++;
+        
+        if(player_enabled==1 && player_pushed==1)
         {
-          outputValue-=6;
+          output -= 4;
         }
       }
       
       if(pause==0)
-      {
-        output = outputValue + outputValueMod;
-        
+      {     
         if(output > 255)
         {
           output = 255;
         }
-        else if(output < 0)
+        else if(output < 45)
         {
-          output = 0;
+          output = 45;
         }
         analogWrite(motor_out, output);
       }
@@ -370,9 +367,53 @@ void loop() {
       break;
   }
   
-
+  if(pause_resume==1)
+  {
+    nowtime=millis();
+     if(nowtime>(lasttimepause_resume+pause_resumeTime))
+        {
+          lcd.setCursor(0, 1);
+          
+          switch(pause_resume_c)
+          {
+            case 0:
+              led_blink = 1;
+              lcd.print("Start in 3 ");
+              break;
+            case 1:
+              led_blink = 0;
+              break;
+            case 2:
+              led_blink = 1;
+              lcd.print("Start in 2 ");
+              break;
+            case 3:
+              led_blink = 0;
+              break;
+            case 4:
+              led_blink = 5;
+              lcd.print("Start in 1 ");
+              break;
+            case 5:
+              led_blink = 0;
+              break;
+            case 6:
+              led_blink = 2;
+              break;
+            case 7:
+              pause_resume = 2;
+              break;
+            default:
+              break;
+          }
+          lasttimepause_resume=nowtime;
+          pause_resume_c++;
+        }
+  }
   
-  if(pause==1)
+  
+  if(pause_resume!=0 || gamemode==0) { }
+  else if(pause==1)
   {
     lcd.setCursor(0, 1);
     lcd.print("Pause!     ");
@@ -388,7 +429,7 @@ void loop() {
     lcd.print("R\365ckw\341rts  ");
   }
 
-  if(player_pushed==1)
+  if(player_pushed==1 && gamemode!=0)
   {
     lcd.setCursor(11, 1);
     lcd.print("\52");
@@ -461,7 +502,7 @@ void loop() {
               if(c_led_b < 0) 
               {
                 c_led_b = 0;
-                led_rgb_fade = 0;
+                led_rgb_fade++;
               }
               break;
               
@@ -515,47 +556,35 @@ void loop() {
           c_led_g = 255;
           c_led_b = 255;
           c_led_ws = 255;
-          led_pause_blink = 0;
         }
         ledmode_old=2;
-          
-        nowtime=millis();
-        if(nowtime>(lasttimeLed+ledmode_pause_blinktime))
-        {
-          switch(led_pause_blink)
+        
+          switch(led_blink)
           {
             case 0:
-              c_led_r = 0;
-              break;
-            case 1:
-              c_led_r = 255;
-              break;
-            case 2:
-              c_led_r = 0;
-              break;
-            case 3:
-              c_led_r = 255;
-              break;
-            case 4:
-              c_led_r = 0;
-              c_led_g = 0;
-              break;
-            case 5:
               c_led_r = 255;
               c_led_g = 255;
+              c_led_b = 255;
+              c_led_ws = 255;
               break;
-            case 6:
+            case 1:
+              c_led_r = 0;
+              break;
+            case 2:
               c_led_g = 0;
               break;
-            case 7:
-              pause_trigger = 1;
+            case 3:
+              c_led_b = 0;
               break;
+            case 4:
+              c_led_ws = 0;
+              break;
+            case 5:
+              c_led_r = 0;
+              c_led_g = 200;
             default:
               break;
           }
-          lasttimeLed=nowtime;
-          led_pause_blink++;
-        }
         break;
         
     }
